@@ -63,7 +63,5 @@ def add_record():
     conn.commit()
     return "<h3>Record Added!</h3><a href='/'>Back</a>"
 
-if __name__ == "__main__":
-    # App Service requires dynamic port
-    port = int(os.environ.get("PORT", 8000))
-    app.run(host="0.0.0.0", port=port)
+if __name__ == '__main__':
+   app.run()
