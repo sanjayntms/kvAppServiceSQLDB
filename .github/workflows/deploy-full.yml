@@ -53,9 +53,9 @@ jobs:
 
         az sql db show -n $DB_NAME -s $SQL_SERVER -g $RG || \
           az sql db create -n $DB_NAME -s $SQL_SERVER -g $RG --service-objective Basic
-
-        echo "CONNSTR=Server=tcp:$SQL_SERVER.database.windows.net,1433;Database=$DB_NAME;User ID=sqladmin;Password=$PASSWORD;Encrypt=true;" >> $GITHUB_ENV
-
+    
+        echo "CONNSTR=Server=tcp:$SQL_SERVER.database.windows.net,1433;Database=$DB_NAME;Uid=sqladmin;Pwd=$PASSWORD;Encrypt=yes;" >> $GITHUB_ENV
+    # Server=tcp:kvsqlserverdemo.database.windows.net,1433; Database=demoDB; Uid=sqladmin; Pwd=P@ssw0rd123#; Encrypt=yes; Driver={ODBC Driver 17 for SQL Server}
     # -----------------------
     # Key Vault (RBAC Mode)
     # -----------------------
