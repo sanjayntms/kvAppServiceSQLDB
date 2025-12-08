@@ -1,2 +1,4 @@
 flask
-pyodbc
+pymssql
+azure-identity
+azure-keyvault-secrets
