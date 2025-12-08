@@ -40,7 +40,7 @@ def index():
     cursor.execute("SELECT Id, Name, CreatedAt FROM DemoRecords ORDER BY Id DESC")
     rows = cursor.fetchall()
 
-    html = "<h1>Key Vault → SQL → App Service Demo</h1>"
+    html = "<h1>NTMS Azure Batch - Security -Key Vault → SQL → App Service Demo</h1>"
     html += "<form method='post' action='/add'>"
     html += "<input name='name' placeholder='Enter Name' required>"
     html += "<button>Add</button></form><hr>"
