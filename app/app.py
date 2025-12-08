@@ -1,47 +1,59 @@
 from flask import Flask, request, Response
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
-import pymssql
+import pyodbc
 import os
 import json
 import time
 
 app = Flask(__name__)
 
-# Environment variables set in App Service:
-# KEY_VAULT_URI
-# AZURE_CLIENT_ID (optional if using system identity)
+# Environment variables set by App Service:
+#   KEY_VAULT_URI
+#   AZURE_CLIENT_ID  (optional if system identity is default)
 KEY_VAULT_URI = os.getenv("KEY_VAULT_URI")
 SECRET_NAME = "sql-conn-string"
 
 
-# -----------------------------
-# Helper: Connect to SQL
-# -----------------------------
+# ----------------------------------------------------
+# DATABASE CONNECTION USING PYODBC + ODBC DRIVER 18
+# ----------------------------------------------------
 def get_connection():
     credential = DefaultAzureCredential(managed_identity_client_id=os.getenv("AZURE_CLIENT_ID"))
-
     client = SecretClient(vault_url=KEY_VAULT_URI, credential=credential)
+
     conn_str = client.get_secret(SECRET_NAME).value
 
-    # Parse ADO.NET connection string
+    # Parse Key Vault ADO.NET string
     parts = {}
     for item in conn_str.split(";"):
         if "=" in item:
             key, value = item.split("=", 1)
             parts[key.strip().lower()] = value.strip()
 
-    server = parts["server"].replace("tcp:", "").replace(",1433", "")
+    server = parts["server"]  # full tcp:servername.database.windows.net,1433
+    database = parts["database"]
     username = parts["user id"]
     password = parts["password"]
-    database = parts["database"]
+    encrypt = parts.get("encrypt", "yes")
 
-    return pymssql.connect(server, username, password, database)
+    # pyodbc ODBC driver connection string
+    odbc_str = (
+        f"DRIVER={{ODBC Driver 18 for SQL Server}};"
+        f"SERVER={server};"
+        f"DATABASE={database};"
+        f"UID={username};"
+        f"PWD={password};"
+        f"Encrypt={encrypt};"
+        f"TrustServerCertificate=no;"
+    )
+
+    return pyodbc.connect(odbc_str)
 
 
-# -----------------------------
-# Homepage — Shows DB Records
-# -----------------------------
+# ----------------------------------------------------
+# HOME PAGE (Show Records)
+# ----------------------------------------------------
 @app.route("/", methods=["GET"])
 def index():
     conn = get_connection()
@@ -52,86 +64,86 @@ def index():
     html = "<h1>Key Vault → SQL → App Service Demo</h1>"
     html += "<form method='post' action='/add'>"
     html += "<input name='name' placeholder='Enter Name'>"
-    html += "<button>Add</button></form><hr>"
+    html += "<button>Add</button>"
+    html += "</form><hr>"
 
     for r in rows:
         html += f"{r[0]} — {r[1]} — {r[2]}<br>"
 
-    # Add button to open live animation
-    html += "<br><br><a href='/live'><button style='padding:12px;font-size:18px;'>Show Live API Flow 🚀</button></a>"
+    html += "<br><br>"
+    html += "<a href='/live'><button style='padding:12px;font-size:18px;'>Show Live API Flow 🚀</button></a>"
+    html += "<br><br>"
+    html += "<a href='/flow'><button style='padding:12px;font-size:18px;'>Show Architecture Flow 🎨</button></a>"
 
     return html
 
 
-# -----------------------------
-# Add a Record
-# -----------------------------
+# ----------------------------------------------------
+# ADD A RECORD
+# ----------------------------------------------------
 @app.route("/add", methods=["POST"])
 def add_record():
     name = request.form.get("name")
+
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO DemoRecords (Name) VALUES (%s)", (name,))
+    cursor.execute("INSERT INTO DemoRecords (Name) VALUES (?)", (name,))
     conn.commit()
+
     return "<h3>Record Added!</h3><a href='/'>Back</a>"
 
 
-# -----------------------------
-# Real-Time API Testing Endpoint
-# -----------------------------
+# ----------------------------------------------------
+# LIVE API STATUS — Shows actual backend operations
+# ----------------------------------------------------
 @app.route("/live/status")
 def live_status():
     steps = []
 
-    def add(label):
-        steps.append({"step": label, "timestamp": time.time()})
+    def log(msg):
+        steps.append({"step": msg, "timestamp": time.time()})
 
     try:
-        add("🔵 Calling Key Vault for secret")
+        log("🔵 Calling Key Vault for SQL secret")
         conn = get_connection()
-        add("🟢 Key Vault returned SQL connection string")
+        log("🟢 Key Vault returned SQL connection string")
 
         cursor = conn.cursor()
-        add("🔵 Running SQL SELECT")
+        log("🔵 Running SQL SELECT")
 
         cursor.execute("SELECT TOP 1 Id, Name FROM DemoRecords ORDER BY Id DESC")
         row = cursor.fetchone()
 
         if row:
-            add(f"🟢 SQL Query OK — Latest record: {row[0]} - {row[1]}")
+            log(f"🟢 SQL OK — Latest record: {row[0]} - {row[1]}")
         else:
-            add("🟢 SQL Query OK — No records yet")
+            log("🟢 SQL OK — No records found")
 
         return json.dumps({"status": "ok", "steps": steps})
 
     except Exception as ex:
-        add(f"❌ Error: {str(ex)}")
+        log(f"❌ ERROR: {str(ex)}")
         return json.dumps({"status": "error", "steps": steps})
 
 
-# -----------------------------
-# Serve Animated HTML Page (/live)
-# -----------------------------
+# ----------------------------------------------------
+# SERVE LIVE ANIMATION PAGE
+# ----------------------------------------------------
 @app.route("/live")
 def live_page():
     return app.send_static_file("liveflow.html")
 
 
-# -----------------------------
-# Animated System Flow Page (/flow)
-# -----------------------------
+# ----------------------------------------------------
+# ARCHITECTURE FLOW PAGE (/flow)
+# ----------------------------------------------------
 @app.route("/flow")
 def flow_page():
-    html = """ 
-    <!-- Your animated static flow HTML inserted here -->
-    <h1>Flow page placeholder — replace with full animated HTML</h1>
-    <p>This is /flow route.</p>
-    """
-    return Response(html, mimetype="text/html")
+    return app.send_static_file("flow.html")  # You can replace with animated page
 
 
-# -----------------------------
-# Run App (App Service ignores port)
-# -----------------------------
+# ----------------------------------------------------
+# RUN FLASK (App Service ignores the port you set)
+# ----------------------------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)
