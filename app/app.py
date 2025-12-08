@@ -1,22 +1,41 @@
-import os
-import pyodbc
 from flask import Flask, request
+from azure.identity import DefaultAzureCredential
+from azure.keyvault.secrets import SecretClient
+import pymssql
+import os
 
 app = Flask(__name__)
 
-# App Service automatically retrieves the Key Vault secret via:
-#   SQL_CONN = @Microsoft.KeyVault(SecretUri=...)
-SQL_CONN = os.getenv("SQL_CONN")
+KEY_VAULT_URI = os.getenv("KEY_VAULT_URI")
+SECRET_NAME = "sql-conn-string"
 
 def get_connection():
-    """Return a live SQL connection using the ODBC connection string."""
-    if not SQL_CONN:
-        raise Exception("SQL_CONN environment variable not set.")
-
-    return pyodbc.connect(
-        SQL_CONN,
-        timeout=5
+    # Required for App Service Managed Identity to authenticate
+    credential = DefaultAzureCredential(
+        managed_identity_client_id=os.getenv("AZURE_CLIENT_ID")
     )
+
+    client = SecretClient(vault_url=KEY_VAULT_URI, credential=credential)
+
+    conn_str = client.get_secret(SECRET_NAME).value
+
+    # Parse ADO.NET Connection String → pymssql format
+    parts = {}
+    for item in conn_str.split(";"):
+        if "=" in item:
+            key, value = item.split("=", 1)
+            parts[key.strip().lower()] = value.strip()
+
+    # ADO.NET keys → pymssql translation
+    server = parts["server"].replace("tcp:", "").replace(",1433", "")
+    username = parts.get("uid") or parts.get("user id")
+    password = parts.get("pwd") or parts.get("password")
+    database = parts["database"]
+
+    try:
+        return pymssql.connect(server=server, user=username, password=password, database=database)
+    except Exception as e:
+        raise Exception(f"pymssql connection failed: {e}\nParsed parts: {parts}")
 
 @app.route("/", methods=["GET"])
 def index():
@@ -27,7 +46,7 @@ def index():
 
     html = "<h1>Key Vault → SQL → App Service Demo</h1>"
     html += "<form method='post' action='/add'>"
-    html += "<input name='name' placeholder='Enter Name' required>"
+    html += "<input name='name' placeholder='Enter Name'>"
     html += "<button>Add</button></form><hr>"
 
     for r in rows:
@@ -35,17 +54,16 @@ def index():
 
     return html
 
-
 @app.route("/add", methods=["POST"])
 def add_record():
     name = request.form.get("name")
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO DemoRecords (Name) VALUES (?)", (name,))
+    cursor.execute("INSERT INTO DemoRecords (Name) VALUES (%s)", (name,))
     conn.commit()
     return "<h3>Record Added!</h3><a href='/'>Back</a>"
 
-
 if __name__ == "__main__":
+    # App Service requires dynamic port
     port = int(os.environ.get("PORT", 8000))
     app.run(host="0.0.0.0", port=port)
