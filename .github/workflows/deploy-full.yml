@@ -1,4 +1,4 @@
-name: Full Azure Infra + App Deployment
+name: Deploy Full Azure Infra + Python App (Idempotent)
 
 on:
   workflow_dispatch:
@@ -6,66 +6,137 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout Code
+      uses: actions/checkout@v4
 
     - name: Azure Login
       uses: azure/login@v2
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-    - name: Define Variables
+    - name: Set Variables
       run: |
+        echo "SUBSCRIPTION=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
         echo "RG=kvsql-demo-rg" >> $GITHUB_ENV
         echo "LOC=centralindia" >> $GITHUB_ENV
-        echo "SQL_SERVER=kvsql$RANDOM" >> $GITHUB_ENV
+        echo "SQL_SERVER=kvsqlserverdemo" >> $GITHUB_ENV
         echo "DB_NAME=demoDB" >> $GITHUB_ENV
-        echo "KV_NAME=kvsqlvault$RANDOM" >> $GITHUB_ENV
-        echo "APP_NAME=kvsqlapp$RANDOM" >> $GITHUB_ENV
+        echo "KV_NAME=kvsqlvaultdemo" >> $GITHUB_ENV
         echo "PLAN_NAME=kvsqlplan" >> $GITHUB_ENV
+        echo "APP_NAME=kvsqlappdemo" >> $GITHUB_ENV
 
-    - name: Create Resource Group
-      run: az group create -n $RG -l $LOC
+    # -------------------------------------------------------------
 
-    - name: Create SQL + DB
+    - name: Create Resource Group (Idempotent)
+      run: |
+        az group create -n $RG -l $LOC
+
+    # -------------------------------------------------------------
+
+    - name: Create SQL Server + DB (Idempotent)
       run: |
         PASSWORD="P@ssw0rd123#"
-        az sql server create -n $SQL_SERVER -g $RG -l $LOC -u sqladmin -p "$PASSWORD"
-        az sql db create -n $DB_NAME -s $SQL_SERVER -g $RG --service-objective Basic
+
+        # Create SQL server if not exists
+        az sql server show -n $SQL_SERVER -g $RG || \
+          az sql server create -n $SQL_SERVER -g $RG -l $LOC -u sqladmin -p "$PASSWORD"
+
+        # Create DB if not exists
+        az sql db show -n $DB_NAME -s $SQL_SERVER -g $RG || \
+          az sql db create -n $DB_NAME -s $SQL_SERVER -g $RG --service-objective Basic
+
         echo "CONNSTR=Server=tcp:$SQL_SERVER.database.windows.net,1433;Database=$DB_NAME;User ID=sqladmin;Password=$PASSWORD;Encrypt=true;" >> $GITHUB_ENV
 
-    - name: Key Vault + Secret
-      run: |
-        az keyvault create -n $KV_NAME -g $RG -l $LOC
-        az keyvault secret set --vault-name $KV_NAME --name SqlConnString --value "$CONNSTR"
+    # -------------------------------------------------------------
 
-    - name: Create App Service Plan + App
+    - name: Create Key Vault (Idempotent)
       run: |
-        az appservice plan create -g $RG -n $PLAN_NAME --sku B1 --is-linux
-        az webapp create -g $RG -p $PLAN_NAME -n $APP_NAME --runtime "PYTHON:3.10"
+        az keyvault show -n $KV_NAME -g $RG || \
+          az keyvault create -n $KV_NAME -g $RG -l $LOC --enable-rbac-authorization true
 
-    - name: Enable Build Automation
+    # -------------------------------------------------------------
+
+    - name: Assign RBAC Role to GitHub Actions SPN (Secrets Officer)
       run: |
-       az webapp config appsettings set \
-       -g $RG \
-       -n $APP_NAME \
-       --settings SCM_DO_BUILD_DURING_DEPLOYMENT=true
-    
-    - name: Assign Managed Identity
+        SP_OBJID=$(az ad sp show --id ${{ secrets.AZURE_CLIENT_ID }} --query id -o tsv)
+
+        az role assignment create \
+          --role "Key Vault Secrets Officer" \
+          --assignee-object-id $SP_OBJID \
+          --assignee-principal-type ServicePrincipal \
+          --scope /subscriptions/$SUBSCRIPTION/resourceGroups/$RG/providers/Microsoft.KeyVault/vaults/$KV_NAME \
+        || echo "Role already exists"
+
+    # -------------------------------------------------------------
+
+    - name: Store SQL Connection String in Key Vault (Idempotent)
+      run: |
+        az keyvault secret set \
+          --vault-name $KV_NAME \
+          --name SqlConnString \
+          --value "$CONNSTR"
+
+    # -------------------------------------------------------------
+
+    - name: Create App Service Plan (Idempotent)
+      run: |
+        az appservice plan show -g $RG -n $PLAN_NAME || \
+          az appservice plan create -g $RG -n $PLAN_NAME --sku B1 --is-linux
+
+    # -------------------------------------------------------------
+
+    - name: Create Web App (Idempotent)
+      run: |
+        az webapp show -g $RG -n $APP_NAME || \
+          az webapp create -g $RG -n $APP_NAME -p $PLAN_NAME --runtime "PYTHON:3.10"
+
+    # -------------------------------------------------------------
+
+    - name: Enable Build Automation (Required for Python)
+      run: |
+        az webapp config appsettings set \
+          -g $RG \
+          -n $APP_NAME \
+          --settings SCM_DO_BUILD_DURING_DEPLOYMENT=true
+
+    # -------------------------------------------------------------
+
+    - name: Assign RBAC Role to App Service Managed Identity (Secrets User)
       run: |
         APP_ID=$(az webapp identity assign -g $RG -n $APP_NAME --query principalId -o tsv)
-        az keyvault set-policy -n $KV_NAME --object-id $APP_ID --secret-permissions get list
 
-    - name: Add Key Vault Reference
+        az role assignment create \
+          --role "Key Vault Secrets User" \
+          --assignee-object-id $APP_ID \
+          --assignee-principal-type ServicePrincipal \
+          --scope /subscriptions/$SUBSCRIPTION/resourceGroups/$RG/providers/Microsoft.KeyVault/vaults/$KV_NAME \
+        || echo "Role already exists"
+
+    # -------------------------------------------------------------
+
+    - name: Add Key Vault Reference to App Settings
       run: |
-        SECRET_URI=$(az keyvault secret show --vault-name $KV_NAME --name SqlConnString --query id -o tsv)
-        az webapp config appsettings set -g $RG -n $APP_NAME --settings SQL_CONN="@Microsoft.KeyVault(SecretUri=$SECRET_URI)"
+        SECRET_URI=$(az keyvault secret show \
+            --vault-name $KV_NAME \
+            --name SqlConnString \
+            --query id -o tsv)
 
-    - name: Zip Application
+        az webapp config appsettings set \
+          -g $RG \
+          -n $APP_NAME \
+          --settings SQL_CONN="@Microsoft.KeyVault(SecretUri=$SECRET_URI)"
+
+    # -------------------------------------------------------------
+
+    - name: Package Application
       run: |
         mkdir -p output
         cd app
         zip -r ../output/app.zip .
+
+    # -------------------------------------------------------------
 
     - name: Deploy App
       uses: azure/webapps-deploy@v3
