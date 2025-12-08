@@ -1,14 +1,13 @@
-name: Full Azure Deployment (SQL + KeyVault + App Service)
+name: Build Full Azure Environment + Deploy App
 
 on:
   workflow_dispatch:
 
 jobs:
-  deploy:
+  deploy-infra-and-app:
     runs-on: ubuntu-latest
 
     steps:
-
     - name: Checkout
       uses: actions/checkout@v4
 
@@ -17,49 +16,56 @@ jobs:
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-    - name: Set variables
+    - name: Define Variables
+      id: vars
       run: |
-        echo "RG=kvsql-demo-rg" >> $GITHUB_ENV
+        echo "RG=sqlkv-demo-rg" >> $GITHUB_ENV
         echo "LOC=centralindia" >> $GITHUB_ENV
-        echo "SQLSERVER=kvsqlserver$RANDOM" >> $GITHUB_ENV
-        echo "DBNAME=demoDB" >> $GITHUB_ENV
-        echo "KVNAME=kvsqlvault$RANDOM" >> $GITHUB_ENV
-        echo "WEBAPP=kvsqlapp$RANDOM" >> $GITHUB_ENV
-        echo "PLAN=kvsqlplan" >> $GITHUB_ENV
-        echo "PASSWORD=P@ssw0rd123#" >> $GITHUB_ENV
+        echo "SQL_SERVER=kvsqlserver$RANDOM" >> $GITHUB_ENV
+        echo "DB_NAME=demoDB" >> $GITHUB_ENV
+        echo "KV_NAME=kv-demo-$RANDOM" >> $GITHUB_ENV
+        echo "APP_NAME=kvsqlapp$RANDOM" >> $GITHUB_ENV
+        echo "PLAN_NAME=kvsqlplan" >> $GITHUB_ENV
 
-    - name: Create Azure Resources
+    - name: Create Resource Group
+      run: az group create -n $RG -l $LOC
+
+    - name: Create SQL Server + DB
       run: |
-        az group create -n $RG -l $LOC
+        PASSWORD="P@ssw0rd123#"
+        az sql server create -n $SQL_SERVER -g $RG -l $LOC -u sqladmin -p "$PASSWORD"
+        az sql db create -n $DB_NAME -s $SQL_SERVER -g $RG --service-objective Basic
+        echo "CONNSTR=Server=tcp:$SQL_SERVER.database.windows.net,1433;Database=$DB_NAME;User ID=sqladmin;Password=$PASSWORD;Encrypt=true;" >> $GITHUB_ENV
 
-        az sql server create -n $SQLSERVER -g $RG -l $LOC \
-          -u sqladmin -p "$PASSWORD"
+    - name: Create Key Vault + Store Secret
+      run: |
+        az keyvault create -n $KV_NAME -g $RG -l $LOC
+        az keyvault secret set --vault-name $KV_NAME --name SqlConnString --value "$CONNSTR"
 
-        az sql db create -n $DBNAME -s $SQLSERVER -g $RG --service-objective Basic
+    - name: Create App Service Plan + Web App
+      run: |
+        az appservice plan create -g $RG -n $PLAN_NAME --sku B1 --is-linux
+        az webapp create -g $RG -p $PLAN_NAME -n $APP_NAME --runtime "PYTHON:3.10"
 
-        az keyvault create -n $KVNAME -g $RG -l $LOC
+    - name: Enable Managed Identity
+      run: |
+        APP_ID=$(az webapp identity assign -g $RG -n $APP_NAME --query principalId -o tsv)
+        az keyvault set-policy -n $KV_NAME --object-id $APP_ID --secret-permissions get
 
-        CONN="Server=tcp:$SQLSERVER.database.windows.net,1433;Database=$DBNAME;User ID=sqladmin;Password=$PASSWORD;Encrypt=true;"
-        az keyvault secret set --vault-name $KVNAME --name SqlConnString --value "$CONN"
+    - name: Set Key Vault Reference in App Settings
+      run: |
+        SECRET_URI=$(az keyvault secret show --vault-name $KV_NAME --name SqlConnString --query id -o tsv)
+        az webapp config appsettings set -g $RG -n $APP_NAME --settings \
+          SQL_CONN="@Microsoft.KeyVault(SecretUri=$SECRET_URI)"
 
-        az appservice plan create -g $RG -n $PLAN --sku B1 --is-linux
-
-        az webapp create -g $RG -p $PLAN -n $WEBAPP --runtime "PYTHON:3.10"
-
-        APP_ID=$(az webapp identity assign -g $RG -n $WEBAPP --query principalId -o tsv)
-        az keyvault set-policy -n $KVNAME --object-id $APP_ID --secret-permissions get list
-
-        SECRET_URI=$(az keyvault secret show --vault-name $KVNAME --name SqlConnString --query id -o tsv)
-        az webapp config appsettings set -g $RG -n $WEBAPP \
-          --settings SQL_CONN="@Microsoft.KeyVault(SecretUri=$SECRET_URI)"
-
-    - name: Prepare ZIP package
+    - name: Zip Application
       run: |
         cd app
         zip -r ../app.zip .
 
-    - name: Deploy to Azure App Service
+    - name: Deploy to App Service
       uses: azure/webapps-deploy@v3
       with:
-        app-name: ${{ env.WEBAPP }}
+        app-name: ${{ env.APP_NAME }}
+        resource-group: ${{ env.RG }}
         package: app.zip
