@@ -58,17 +58,7 @@ jobs:
 
     # -------------------------------------------------------------
 
-    - name: Assign RBAC Role to GitHub Actions SPN (Secrets Officer)
-      run: |
-        SP_OBJID=$(az ad sp show --id ${{ secrets.AZURE_CLIENT_ID }} --query id -o tsv)
-
-        az role assignment create \
-          --role "Key Vault Secrets Officer" \
-          --assignee-object-id $SP_OBJID \
-          --assignee-principal-type ServicePrincipal \
-          --scope /subscriptions/$SUBSCRIPTION/resourceGroups/$RG/providers/Microsoft.KeyVault/vaults/$KV_NAME \
-        || echo "Role already exists"
-
+    
     # -------------------------------------------------------------
 
     - name: Store SQL Connection String in Key Vault (Idempotent)
@@ -103,18 +93,7 @@ jobs:
 
     # -------------------------------------------------------------
 
-    - name: Assign RBAC Role to App Service Managed Identity (Secrets User)
-      run: |
-        APP_ID=$(az webapp identity assign -g $RG -n $APP_NAME --query principalId -o tsv)
-
-        az role assignment create \
-          --role "Key Vault Secrets User" \
-          --assignee-object-id $APP_ID \
-          --assignee-principal-type ServicePrincipal \
-          --scope /subscriptions/$SUBSCRIPTION/resourceGroups/$RG/providers/Microsoft.KeyVault/vaults/$KV_NAME \
-        || echo "Role already exists"
-
-    # -------------------------------------------------------------
+   
 
     - name: Add Key Vault Reference to App Settings
       run: |
