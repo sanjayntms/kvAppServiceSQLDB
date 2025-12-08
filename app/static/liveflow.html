@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Live API Flow Animation</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #0d1117;
+        color: #e6edf3;
+        padding: 30px;
+    }
+
+    h1 {
+        text-align: center;
+        font-size: 26px;
+    }
+
+    #steps {
+        margin-top: 20px;
+        padding: 20px;
+        border-radius: 15px;
+        background: #161b22;
+        border: 1px solid #30363d;
+        font-size: 18px;
+        line-height: 1.6;
+    }
+
+    .step {
+        opacity: 0;
+        transform: translateX(-20px);
+        transition: all 0.6s ease;
+        padding: 8px 0;
+    }
+
+    .step.visible {
+        opacity: 1;
+        transform: translateX(0);
+    }
+
+    .pulse {
+        animation: pulse 1.2s infinite;
+        color: #58a6ff;
+    }
+
+    @keyframes pulse {
+        0% { opacity: 0.2; }
+        50% { opacity: 1; }
+        100% { opacity: 0.2; }
+    }
+
+    #reload {
+        margin: 20px auto;
+        padding: 12px 22px;
+        background: #238636;
+        border: none;
+        border-radius: 10px;
+        color: white;
+        font-size: 18px;
+        cursor: pointer;
+        display: block;
+    }
+</style>
+</head>
+<body>
+
+<h1>🔄 Live API Call Flow</h1>
+
+<p style="text-align:center;">This animation shows real Key Vault + SQL calls happening live.</p>
+
+<div id="steps"></div>
+
+<button id="reload">Replay</button>
+
+<script>
+function startAnimation() {
+    document.getElementById("steps").innerHTML = "<div class='step visible pulse'>⏳ Calling backend...</div>";
+
+    fetch("/live/status")
+        .then(response => response.json())
+        .then(data => {
+            let container = document.getElementById("steps");
+            container.innerHTML = "";
+
+            let delay = 0;
+
+            data.steps.forEach((s) => {
+                let div = document.createElement("div");
+                div.classList.add("step");
+                div.innerHTML = s.step;
+
+                setTimeout(() => {
+                    div.classList.add("visible");
+                }, delay);
+
+                container.appendChild(div);
+                delay += 600;
+            });
+        })
+        .catch(err => {
+            let container = document.getElementById("steps");
+            container.innerHTML = "<div class='step visible'>❌ Error calling API</div>";
+        });
+}
+
+document.getElementById("reload").addEventListener("click", startAnimation);
+
+startAnimation();
+</script>
+
+</body>
+</html>
