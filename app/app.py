@@ -6,32 +6,30 @@ import os
 
 app = Flask(__name__)
 
-# Values injected by GitHub Actions + App Service
 KEY_VAULT_URI = os.getenv("KEY_VAULT_URI")
 SECRET_NAME = "sql-conn-string"
 
 def get_connection():
-    # Required on Azure App Service for Managed Identity authentication
+    # Use Managed Identity inside App Service
     credential = DefaultAzureCredential(
         managed_identity_client_id=os.getenv("AZURE_CLIENT_ID")
     )
 
-    # Retrieve SQL connection string from Key Vault
+    # Get connection string from Key Vault
     client = SecretClient(vault_url=KEY_VAULT_URI, credential=credential)
     conn_str = client.get_secret(SECRET_NAME).value
 
-    # App Service requires explicit SQL ODBC driver
-    if "Driver=" not in conn_str:
-        conn_str += ";Driver={ODBC Driver 17 for SQL Server}"
+    # Normalize and ALWAYS append the driver
+    conn_str = conn_str.strip().rstrip(";")
+    conn_str += ";Driver={ODBC Driver 17 for SQL Server}"
 
     try:
-        # pyodbc supports redirect mode used by Azure SQL
         conn = pyodbc.connect(conn_str, timeout=5)
         return conn
     except Exception as e:
         raise Exception(
-            f"ODBC connection failed: {e}\n"
-            f"Connection string used: {conn_str}"
+            f"\n❌ ODBC connection failed: {e}\n"
+            f"➡️ Connection string used: {conn_str}\n"
         )
 
 
@@ -61,9 +59,3 @@ def add_record():
     cursor.execute("INSERT INTO DemoRecords (Name) VALUES (?)", (name,))
     conn.commit()
     return "<h3>Record Added!</h3><a href='/'>Back</a>"
-
-
-if __name__ == "__main__":
-    # App Service supplies its own PORT dynamically
-    port = int(os.environ.get("PORT", 8000))
-    app.run(host="0.0.0.0", port=port)
