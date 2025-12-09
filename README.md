@@ -6,3 +6,4 @@
     Name NVARCHAR(100),
     CreatedAt DATETIME DEFAULT GETDATE()
 );
+* Need to allow access from Azure services to sql database 
