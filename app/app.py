@@ -59,3 +59,56 @@ def add_record():
     cursor.execute("INSERT INTO DemoRecords (Name) VALUES (?)", (name,))
     conn.commit()
     return "<h3>Record Added!</h3><a href='/'>Back</a>"
+
+# ----------------------------------------------------
+# LIVE API STATUS — Shows actual backend operations
+# ----------------------------------------------------
+@app.route("/live/status")
+def live_status():
+    steps = []
+
+    def log(msg):
+        steps.append({"step": msg, "timestamp": time.time()})
+
+    try:
+        log("🔵 Calling Key Vault for SQL secret")
+        conn = get_connection()
+        log("🟢 Key Vault returned SQL connection string")
+
+        cursor = conn.cursor()
+        log("🔵 Running SQL SELECT")
+
+        cursor.execute("SELECT TOP 1 Id, Name FROM DemoRecords ORDER BY Id DESC")
+        row = cursor.fetchone()
+
+        if row:
+            log(f"🟢 SQL OK — Latest record: {row[0]} - {row[1]}")
+        else:
+            log("🟢 SQL OK — No records found")
+
+        return json.dumps({"status": "ok", "steps": steps})
+
+    except Exception as ex:
+        log(f"❌ ERROR: {str(ex)}")
+        return json.dumps({"status": "error", "steps": steps})
+
+
+# ----------------------------------------------------
+# SERVE LIVE ANIMATION PAGE
+# ----------------------------------------------------
+@app.route("/live")
+def live_page():
+    return app.send_static_file("liveflow.html")
+
+
+# ----------------------------------------------------
+# ARCHITECTURE FLOW PAGE (/flow)
+# ----------------------------------------------------
+@app.route("/flow")
+def flow_page():
+    return app.send_static_file("flow.html")  # You can replace with animated page
+
+
+# ----------------------------------------------------
+# RUN FLASK (App Service ignores the port you set)
+# ----------------------------------------------------
