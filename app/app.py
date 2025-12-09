@@ -41,47 +41,129 @@ def index():
     cursor.execute("SELECT Id, Name, CreatedAt FROM DemoRecords ORDER BY Id DESC")
     rows = cursor.fetchall()
 
-    html = "<h1>NTMS Azure Batch - Security -Key Vault → SQL → App Service Demo</h1>"
-    html += "<form method='post' action='/add'>"
-    html += "<input name='name' placeholder='Enter Name' required>"
-    html += "<button>Add</button></form><hr>"
+    html = """
+    <html>
+    <head>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(145deg, #0d1117, #1b2636);
+            font-family: 'Segoe UI', sans-serif;
+            color: #e6edf3;
+        }
 
-    # NEW BUTTONS HERE
-    html += """
-    <br><br>
-    <a href='/live' style="
-        display:inline-block;
-        padding:12px 24px;
-        background:#238636;
-        color:white;
-        border-radius:8px;
-        text-decoration:none;
-        font-size:18px;
-        font-weight:500;
-    ">
-        🚀 View Live API Flow Animation
-    </a>
+        .container {
+            width: 80%;
+            margin: 40px auto;
+        }
 
-    <br><br>
+        .title {
+            text-align: center;
+            font-size: 34px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: #ffffff;
+            text-shadow: 0px 0px 8px #0af;
+        }
 
-    <a href='/flow' style="
-        display:inline-block;
-        padding:12px 24px;
-        background:#0366d6;
-        color:white;
-        border-radius:8px;
-        text-decoration:none;
-        font-size:18px;
-        font-weight:500;
-    ">
-        🎨 View Architecture Flow
-    </a>
+        .card {
+            background: #161b22;
+            border-radius: 14px;
+            padding: 28px;
+            border: 1px solid #30363d;
+            box-shadow: 0 0 18px rgba(0,0,0,0.3);
+        }
 
-    <hr>
+        input {
+            padding: 10px;
+            width: 250px;
+            border-radius: 6px;
+            border: 1px solid #30363d;
+            background: #0d1117;
+            color: white;
+            font-size: 16px;
+        }
+
+        button {
+            padding: 10px 18px;
+            background: #238636;
+            border: none;
+            border-radius: 6px;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+            margin-left: 4px;
+        }
+
+        button:hover {
+            background: #2ea043;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 14px 22px;
+            margin-top: 20px;
+            margin-right: 12px;
+            font-size: 18px;
+            border-radius: 10px;
+            text-decoration: none;
+            color: white;
+            font-weight: 500;
+        }
+
+        .green-btn { background: #238636; }
+        .green-btn:hover { background: #2ea043; }
+
+        .blue-btn { background: #0366d6; }
+        .blue-btn:hover { background: #0572ed; }
+
+        .records {
+            margin-top: 30px;
+            padding: 20px;
+            background: #0d1117;
+            border-radius: 10px;
+            border: 1px solid #30363d;
+        }
+
+        .record-item {
+            padding: 8px 0;
+            border-bottom: 1px solid #30363d;
+        }
+    </style>
+    </head>
+
+    <body>
+    <div class="container">
+
+        <div class="title">
+            NTMS Azure Batch — Key Vault → SQL → App Service Demo
+        </div>
+
+        <div class="card">
+            <form method="post" action="/add">
+                <input name="name" placeholder="Enter Name" required>
+                <button>Add</button>
+            </form>
+
+            <a href="/live" class="btn green-btn">🚀 View Live API Flow Animation</a>
+            <a href="/flow" class="btn blue-btn">🎨 View Architecture Flow</a>
+        </div>
+
+        <div class="records">
+            <h3>📌 Stored Records</h3>
     """
 
+    # Insert SQL rows
     for r in rows:
-        html += f"{r[0]} — {r[1]} — {r[2]}<br>"
+        html += f"<div class='record-item'>{r[0]} — {r[1]} — {r[2]}</div>"
+
+    html += """
+        </div>
+    </div>
+    </body>
+    </html>
+    """
 
     return html
 
