@@ -3,7 +3,8 @@ from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
 import pyodbc
 import os
-
+import json
+import time
 app = Flask(__name__)
 
 KEY_VAULT_URI = os.getenv("KEY_VAULT_URI")
