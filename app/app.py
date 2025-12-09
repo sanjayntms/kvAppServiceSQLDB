@@ -46,10 +46,45 @@ def index():
     html += "<input name='name' placeholder='Enter Name' required>"
     html += "<button>Add</button></form><hr>"
 
+    # NEW BUTTONS HERE
+    html += """
+    <br><br>
+    <a href='/live' style="
+        display:inline-block;
+        padding:12px 24px;
+        background:#238636;
+        color:white;
+        border-radius:8px;
+        text-decoration:none;
+        font-size:18px;
+        font-weight:500;
+    ">
+        🚀 View Live API Flow Animation
+    </a>
+
+    <br><br>
+
+    <a href='/flow' style="
+        display:inline-block;
+        padding:12px 24px;
+        background:#0366d6;
+        color:white;
+        border-radius:8px;
+        text-decoration:none;
+        font-size:18px;
+        font-weight:500;
+    ">
+        🎨 View Architecture Flow
+    </a>
+
+    <hr>
+    """
+
     for r in rows:
         html += f"{r[0]} — {r[1]} — {r[2]}<br>"
 
     return html
+
 
 
 @app.route("/add", methods=["POST"])
