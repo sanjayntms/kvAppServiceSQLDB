@@ -110,8 +110,8 @@ def live_status():
 
         server = parts["server"].replace("tcp:", "").split(",")[0]
         database = parts["database"]
-        username = parts["user id"]
-        password = parts["password"]
+        username = parts.get("user id") or parts.get("uid")
+        password = parts.get("password") or parts.get("pwd")
 
         odbc_str = (
             "DRIVER={ODBC Driver 17 for SQL Server};"
