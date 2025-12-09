@@ -69,13 +69,68 @@ def live_status():
     steps = []
 
     def log(msg):
-        steps.append({"step": msg, "timestamp": time.time()})
+        steps.append({"step": msg, "time": time.time()})
 
     try:
-        log("🔵 Calling Key Vault for SQL secret")
-        conn = get_connection()
+        # ----------------------------------------------------
+        # 1. Get Managed Identity Token
+        # ----------------------------------------------------
+        log("🔵 Requesting Managed Identity token from Azure AD")
+
+        credential = DefaultAzureCredential(
+            managed_identity_client_id=os.getenv("AZURE_CLIENT_ID")
+        )
+        token = credential.get_token("https://vault.azure.net/.default")
+
+        log(f"🟢 Azure AD returned access token (expires in {token.expires_on - int(time.time())}s)")
+
+        # ----------------------------------------------------
+        # 2. Call Key Vault with token
+        # ----------------------------------------------------
+        log("🔵 Calling Key Vault using access token")
+
+        client = SecretClient(vault_url=KEY_VAULT_URI, credential=credential)
+        secret = client.get_secret(SECRET_NAME)
+
         log("🟢 Key Vault returned SQL connection string")
 
+        conn_str = secret.value
+
+        # ----------------------------------------------------
+        # 3. Open SQL connection
+        # ----------------------------------------------------
+        log("🔵 Opening ODBC connection to Azure SQL")
+
+        # Parse Key Vault ADO.NET style → ODBC format
+        parts = {}
+        for item in conn_str.split(";"):
+            if "=" in item:
+                key, value = item.split("=", 1)
+                parts[key.strip().lower()] = value.strip()
+
+        server = parts["server"].replace("tcp:", "").split(",")[0]
+        database = parts["database"]
+        username = parts["user id"]
+        password = parts["password"]
+
+        odbc_str = (
+            "DRIVER={ODBC Driver 17 for SQL Server};"
+            f"SERVER={server};"
+            "PORT=1433;"
+            f"DATABASE={database};"
+            f"UID={username};"
+            f"PWD={password};"
+            "Encrypt=yes;"
+            "TrustServerCertificate=no;"
+        )
+
+        conn = pyodbc.connect(odbc_str, timeout=5)
+
+        log("🟢 SQL login successful")
+
+        # ----------------------------------------------------
+        # 4. Run SELECT
+        # ----------------------------------------------------
         cursor = conn.cursor()
         log("🔵 Running SQL SELECT")
 
