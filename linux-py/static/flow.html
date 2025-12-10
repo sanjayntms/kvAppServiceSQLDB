@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Architecture Flow</title>
+
+<style>
+    body {
+        background: #0d1117;
+        color: #e6edf3;
+        font-family: Arial, sans-serif;
+        padding: 40px;
+    }
+
+    h1 {
+        text-align: center;
+        margin-bottom: 10px;
+        font-size: 32px;
+    }
+
+    .subtitle {
+        text-align: center;
+        margin-bottom: 30px;
+        opacity: 0.8;
+    }
+
+    .flow-box {
+        max-width: 900px;
+        margin: auto;
+        background: #161b22;
+        border: 1px solid #30363d;
+        padding: 25px;
+        border-radius: 20px;
+    }
+
+    .step {
+        margin: 20px 0;
+        padding: 20px;
+        background: #0f1620;
+        border-radius: 14px;
+        border: 1px solid #30363d;
+        opacity: 0;
+        transform: translateX(-20px);
+        transition: all 0.6s ease;
+    }
+
+    .step.visible {
+        opacity: 1;
+        transform: translateX(0);
+    }
+
+    .step-title {
+        font-size: 20px;
+        margin-bottom: 8px;
+        color: #58a6ff;
+    }
+</style>
+
+</head>
+
+<body>
+
+<h1>🔐 Key Vault → App Service → SQL Flow</h1>
+<p class="subtitle">A visual walkthrough of the backend architecture.</p>
+
+<div class="flow-box" id="flow">
+
+    <div class="step">
+        <div class="step-title">1️⃣ User opens the Web App</div>
+        Browser sends a request to App Service. HTTPS terminates at Azure Frontend and forwards to Flask.
+    </div>
+
+    <div class="step">
+        <div class="step-title">2️⃣ Flask executes <code>index()</code></div>
+        Flask calls <code>get_connection()</code> to prepare SQL access.
+    </div>
+
+    <div class="step">
+        <div class="step-title">3️⃣ App Service Managed Identity → Azure AD</div>
+        The app authenticates without passwords. Azure AD returns an OAuth token.
+    </div>
+
+    <div class="step">
+        <div class="step-title">4️⃣ Key Vault returns SQL Connection String</div>
+        SecretClient retrieves <code>sql-conn-string</code> securely.
+    </div>
+
+    <div class="step">
+        <div class="step-title">5️⃣ pyodbc + ODBC Driver 18 → Azure SQL</div>
+        A secure TLS 1.2 connection is established.
+    </div>
+
+    <div class="step">
+        <div class="step-title">6️⃣ SQL commands execute</div>
+        App performs <code>INSERT</code> and <code>SELECT</code> on DemoRecords.
+    </div>
+
+    <div class="step">
+        <div class="step-title">7️⃣ Results returned to browser</div>
+        Page refreshes with new entries from SQL.
+    </div>
+
+</div>
+
+<script>
+const steps = document.querySelectorAll(".step");
+let delay = 200;
+
+steps.forEach((step, index) => {
+    setTimeout(() => {
+        step.classList.add("visible");
+    }, delay);
+    delay += 500;
+});
+</script>
+
+</body>
+</html>
