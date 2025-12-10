@@ -1,0 +1,5 @@
+flask
+azure-identity
+azure-keyvault-secrets
+pyodbc
+requests
