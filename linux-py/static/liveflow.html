@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Live Backend Flow Animation</title>
+
+<style>
+    body {
+        background: #0d1117;
+        color: #e6edf3;
+        font-family: "Segoe UI", Arial, sans-serif;
+        padding: 40px;
+    }
+
+    h1 {
+        text-align:center;
+        font-size: 32px;
+        margin-bottom: 10px;
+    }
+
+    #desc {
+        text-align:center;
+        opacity:0.8;
+        font-size:18px;
+        margin-bottom:40px;
+    }
+
+    #box {
+        max-width: 900px;
+        margin: auto;
+        background: #161b22;
+        border: 1px solid #30363d;
+        padding: 30px;
+        border-radius: 15px;
+    }
+
+    .step {
+        display: flex;
+        align-items: center;
+        opacity: 0;
+        transform: translateX(-20px);
+        transition: all 0.6s ease;
+        margin-bottom: 18px;
+        font-size: 19px;
+    }
+
+    .visible {
+        opacity: 1;
+        transform: translateX(0);
+    }
+
+    .dot {
+        height: 18px;
+        width: 18px;
+        border-radius: 50%;
+        margin-right: 12px;
+    }
+
+    .blue { background:#58a6ff; }
+    .green { background:#2ea043; }
+    .red { background:#f85149; }
+
+    #replay {
+        display:block;
+        margin: 30px auto;
+        padding: 14px 32px;
+        background:#238636;
+        color:white;
+        border:none;
+        border-radius:8px;
+        font-size:18px;
+        cursor:pointer;
+    }
+</style>
+</head>
+<body>
+
+<h1>🔄 NTMS Azure Batch Live API Call Flow</h1>
+<div id="desc">Follow the actual backend chain: Managed Identity → Azure AD → Key Vault → SQL</div>
+
+<div id="box"></div>
+
+<button id="replay">Replay</button>
+
+<script>
+function animate() {
+    const box = document.getElementById("box");
+    box.innerHTML = "<div class='step visible'><div class='dot blue'></div>Connecting…</div>";
+
+    fetch("/live/status")
+        .then(r => r.json())
+        .then(data => {
+            box.innerHTML = ""; // clear
+
+            let delay = 200;
+
+            data.steps.forEach(s => {
+                const div = document.createElement("div");
+                div.classList.add("step");
+
+                let color = "blue";
+                if (s.step.includes("🟢")) color = "green";
+                if (s.step.includes("❌")) color = "red";
+
+                div.innerHTML = `<div class='dot ${color}'></div> ${s.step}`;
+
+                setTimeout(() => {
+                    div.classList.add("visible");
+                }, delay);
+
+                delay += 600;
+                box.appendChild(div);
+            });
+        })
+        .catch(() => {
+            box.innerHTML = "<div class='step visible'><div class='dot red'></div>Error calling backend</div>";
+        });
+}
+
+document.getElementById("replay").onclick = animate;
+animate();
+</script>
+
+</body>
+</html>
